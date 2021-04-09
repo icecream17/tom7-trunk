@@ -1,0 +1,54 @@
+<style>
+ table, th, td {
+   border: 1px solid #AAA;
+   border-collapse: collapse;
+ }
+ .c {
+   cursor: pointer
+ }
+ body {
+   font: 14px sans-serif
+ }
+ .sel {
+   background-color: #AAF;
+ }
+</style>
+
+<script>
+ function makeElement(what, cssclass, elt) {
+   var e = document.createElement(what);
+   if (cssclass) e.setAttribute('class', cssclass);
+   if (elt) elt.appendChild(e);
+   return e;
+ }
+ function IMG(cssclass, elt) { return makeElement('IMG', cssclass, elt); }
+ function DIV(cssclass, elt) { return makeElement('DIV', cssclass, elt); }
+ function SPAN(cssclass, elt) { return makeElement('SPAN', cssclass, elt); }
+ function BR(cssclass, elt) { return makeElement('BR', cssclass, elt); }
+ function TEXT(contents, elt) {
+   var e = document.createTextNode(contents);
+   if (elt) elt.appendChild(e);
+   return e;
+ }
+
+ let selected_cell = null;
+ function show(idx) {
+   if (selected_cell)
+     selected_cell.classList.remove('sel');
+   let cell = document.getElementById('c' + idx);
+   cell.classList.add('sel');
+   selected_cell = cell;
+   
+   let elt = document.getElementById('detail');
+   elt.innerHTML = '';
+   elt.appendChild(TEXT('examples for cell #' + idx));
+   for (o of [{f: 'ew', t: 'example (white) win'},
+	      {f: 'el', t: 'example loss'},
+	      {f: 'ed', t: 'example draw'}]) {
+     let d = DIV('ex', elt);
+     TEXT(o.t, DIV('et', d));
+     TEXT(cells[idx][o.f], DIV('pgn', d));
+   }
+ }
+</script>
+  

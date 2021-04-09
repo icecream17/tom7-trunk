@@ -1,0 +1,339 @@
+
+bench.exe on macbook air,
+after king indexing, move pawns into vector loop in Attacked
+Total time: 23.00s (16.09 moves/sec)
+
+After movegen stops when encountering a piece:
+Total time: 24.00s (15.42 moves/sec)
+
+well I ran it a few times and got as low as
+Total time: 22.00s (16.82 moves/sec)
+
+now from 10 games -> 100.
+Total time: 225.00s (16.44 moves/sec)
+
+With MOVEGEN_STOP_PIECE, much worse:
+Total time: 257.00s (14.40 moves/sec)
+
+
+First working version. Lacking odd excursions,
+starts with a white move, doesn't keep up critical streaks,
+perhaps other undiscovered weaknesses.
+Slack 0: 33 time(s)
+Slack 1: 75 time(s)
+Slack 2: 3 time(s)
+Slack 3: 7 time(s)
+Total slack: 102
+Final game is 17598 moves, ending with:
+
+
+Now with odd excursions:
+Slack 0: 36 time(s)
+Slack 1: 82 time(s)
+Total slack: 82
+Final game is 17618 moves, ending with:
+
+Redo game to:
+  - start with black critical move, w/ white knight on opposite color
+  - try to maximize streak with one side
+  - make capturing the queen at the end optional, for corner case
+    in the rules ("any legal sequence...")
+Slack 0: 114 time(s)
+Slack 1: 4 time(s)
+Total slack: 4
+Final game is 17696 moves, ending with:
+
+The slack comes from the handful of times we switch from black moves
+to white moves:
+  1. We need to at least move some white pawns out of the way before
+     we can get any black pawns to promote. 
+
+  after 34. bxa5:
+  2b1kb2/2np1p1p/8/p7/p1p1p1p1/1r1r1q1n/PPPPPPPP/RNBQKB1R w Q - 0 35
+
+  2. It wasn't possible to get all of the black pawns out of the way,
+     because we could only free the knights without a pawn move (and
+     we chose to just free one anyway); we would need to free four
+     white pieces for the black pawns to capture.
+     (MAYBE it would be possible if we tripled pawns instead of
+      doubling? you could make two files, each with three pawns
+      on them -- you don't want more, because you want to minimize
+      the number of pawn captures (each costs ~150 moves since it
+      is both a capture and a pawn move; precious!). So I think not.)
+
+  after 66. Bc2:
+  2Nk4/3p1pBp/8/p1R1B1R1/p1p1p1p1/1Q1P1P1P/2BP1P1P/4K2R b - - 14 66
+
+  3. Black promotes all their pawns and captures all white's pieces.
+
+  after 124. ... g1=R
+  2nk4/8/4n1n1/K3nn2/8/3P1P1P/3P1P1P/4rrr1 w - - 0 125
+
+  4. White promotes all their pawns and captures all black's pieces.
+
+  after 170. Qxg8
+  3NRNQ1/8/k7/8/2K5/6B1/8/6B1 b - - 0 170
+
+  5. Now black captures all of white's pieces, drawing.
+
+I think each of these is essential, so 17696 is likely the longest
+possible game.
+
+
+MOVEGEN_STOP_PIECE
+true: 2m44.409s = 165.00 s = 22.42 m/s
+      2m48= 168.38 = 21.98
+      2m49   ... 21.83
+  additional work for vertical queen and rooks:
+      2m39   ... 23.2
+false: 3m7 = 186.99 = 19.79 m/s
+       2m58 = 178 = 20.72
+
+
+
+--------------------------------------------------
+tournament of just these:
+			CreateFirstMove,
+			CreateCCCP,
+			CreateNoIInsist,
+			CreatePacifist,
+			CreateSameColor,
+			CreateMinOpponentMoves,
+			CreateSinglePlayer,
+54 rounds, 54 threads
+
+real    41m23.970s
+user    0m0.000s
+sys     0m0.046s
+
+then after improving move generation:
+
+real    35m49.339s
+user    0m0.000s
+sys     0m0.031s
+
+--------------------------------------------------
+
+Read 11340000 games: 8m44s
+
+Read and executed 11348507 games from 2017-04:
+real    73m20.479s
+user    0m0.000s
+sys     0m0.000s
+
+Same but grab batches of results:
+
+real    203m43.468s
+user    0m0.000s
+sys     0m0.015s
+
+(much worse, obviously!)
+
+with BigGetC:
+
+70m45.131s
+
+getc: 500000 games at 12500/sec.
+BigGetC 1M games at 22500/sec
+this definitely helps read speeds.
+
+Avoid LazyRE2 with the thought that it may be introducing
+lock contention:
+
+39m55
+
+very successful! Though we still only utilize one numa node.
+
+Removed some dumb debugging stuff inside PGN Parser. Initialize board
+directly, instead of using FEN:
+
+35m25s
+
+
+Better Rtos for SVG creation:
+- piece0.svg   20142 -> 18990 -> 18670 -> 18366
+- piece0.pdf   19360 -> 19360 -> 19360 
+
+
+
+
+--------------------------------------------------
+
+ time ./chessreduce.exe d:\\chess\\lichess_db_standard_rated_2014-06.pgn
+ 
+real    2m40.769s
+user    0m0.015s
+sys     0m0.000s
+
+
+track king positions:
+real    3m26.525s
+user    0m0.000s
+sys     0m0.015s
+
+
+worst of both worlds:
+(track but then search for it)
+4m52.318s
+
+don't track any more, but have the fields, and inline SetPiece
+
+3m20s
+
+don't explicitly inline SetPiece:
+
+3m51 whattt
+
+and back to the original version:
+
+4m1s??
+
+I guess maybe this benchmark is just bad...
+need to find something more repeatable.
+
+ok, closed lichess analysis tab in chrome!!
+now at 2m35s.
+
+ok but still, surprisingly, 3m15 with king tracking!
+
+
+ugh, back to the old version, now max_parallelism=4
+
+2m22s
+
+with parallelism=2, finally seeing dropoff: 3m52s
+
+
+singleplayer:
+
+before dynamic search depth:
+10 games, 169 moves
+Total time: 490.26s (0.34 moves/sec)
+
+real    8m10.516s
+
+after:
+10 games, 164 moves
+Total time: 194.36s (0.84 moves/sec)
+
+real    3m14.609s
+
+with moveexcursion modifying in place:
+10 games, 257 moves
+Total time: 252.32s (1.02 moves/sec)
+
+real    4m12.545s
+
+10 games, 225 moves
+Total time: 340.80s (0.66 moves/sec)
+
+real    5m40.827s
+
+... lots of variance in this benchmark!!
+Maybe should do a new deterministic one.
+It can also test that MoveExcursion has
+the same behavior as ApplyMove and properly
+restores state.
+
+
+New benchmark.
+7.432, 7.305, 7.292 (fancy undo version)
+7.334, 7.166, 7.154 (basic copy/restore)
+7.309, 7.248, 7.229 (copy just src/dst row)
+
+--------------------------------------------------
+
+benchmarking "packed" in memory.
+for all of 2015:
+PageFaultCount: 2009947
+PeakWorkingSetSize: 4009447424
+WorkingSetSize: 3750903808
+QuotaPeakPagedPoolUsage: 208496
+QuotaPagedPoolUsage: 208400
+QuotaPeakNonPagedPoolUsage: 47592
+QuotaNonPagedPoolUsage: 37528
+PagefileUsage: 3838070784
+PeakPagefileUsage: 4160258048
+
+WorkingSetSize is 3.7 GB, which sounds about right
+
+All of 2017:
+PageFaultCount: 9990660
+PeakWorkingSetSize: 21361381376
+WorkingSetSize: 18458726400
+QuotaPeakPagedPoolUsage: 208496
+QuotaPagedPoolUsage: 208400
+QuotaPeakNonPagedPoolUsage: 162240
+QuotaNonPagedPoolUsage: 154488
+PagefileUsage: 18943934464
+PeakPagefileUsage: 22202245120
+
+18'458'726'400
+18 GB for 98'681'301 games, ~187 bytes per game
+
+wow it takes FOREVER (like, minutes) to run the destructor
+for this thing.
+
+All games:
+Total 336531703 games in 434s.
+PageFaultCount: 34324214
+PeakWorkingSetSize: 65094045696
+WorkingSetSize: 63324225536
+QuotaPeakPagedPoolUsage: 208496
+QuotaPagedPoolUsage: 208400
+QuotaPeakNonPagedPoolUsage: 513528
+QuotaNonPagedPoolUsage: 505504
+PagefileUsage: 64986484736
+PeakPagefileUsage: 67029585920
+
+Not that bad to just load everything into ram; peaks at
+about 61 GB memory usage for 336 million games.
+
+Would also need a separate data structure to index the
+positions; there are 21'553'382'902 of these
+(not unique positions, but total positions reached across
+all games, not counting the starting one)
+
+
+even just trying to histogram over all positions, we run out of
+memory; page file usage is 147'914'911'744 (147 GB) plus 100 GB+ of
+actual ram usage, apparently only getting through like 1/4 of the
+data. :/
+
+with 22 billion position instances, we very likely need at least
+32-bit keys to avoid substantial collisions. Maybe 32 would basically
+suffice? After all we can check for an exact match when iterating
+through games...
+
+
+Well I was able to get through all of 2017, at least.
+This was 633'594'211 positions, with a large number appearing only
+a few times:
+
+582'337'984 position(s) appeared 1 time(s)
+8'515'373 position(s) appeared 2 time(s)
+2'511'193 position(s) appeared 3 time(s)
+1'128'413 position(s) appeared 4 time(s)
+664'225 position(s) appeared 5 time(s)
+
+This is actually 92% appearing once!
+(Of course if it appears 5 times it should count 5x; with this
+method we get a singleton rate of 76%).
+
+Then there's a long middle section, and some positions that
+appear extremely often (starting pos is not counted btw):
+
+1 position(s) appeared 1'145'496 time(s)
+1 position(s) appeared 1'292'079 time(s)
+1 position(s) appeared 1'334'304 time(s)
+1 position(s) appeared 1'843'320 time(s)
+1 position(s) appeared 2'978'414 time(s)
+1 position(s) appeared 2'979'230 time(s)
+1 position(s) appeared 7'031'209 time(s)
+
+(these are like 1.e4, I presume.) But even that largest one is only 1%
+of all positions.
+
+But the "positive" thing is that if we can figure out how to efficiently
+store the singletons, then we have essentially solved the problem.
+
