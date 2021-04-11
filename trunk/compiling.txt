@@ -1,0 +1,114 @@
+First, get cygwin
+
+Install zlib, ...gcc? cpp? c++? i forgot
+
+What I have:
+   (screen "select packages", where "view" dropdown is "category")
+   Admin > libattr1
+   Archive >
+      bzip2
+      libbz2_1
+      xz
+      zstd
+   Base > (all)
+   Debug >
+      binutils-debuginfo
+      cygwin-debuginfo
+      mingw64-x86_64-binutils-debuginfo
+   Devel >
+      binutils
+      cygwin-devel
+      gcc-core
+      gcc-g++
+      libargp
+      libltdl7
+      make
+      mingw64-x86_64-binutils
+      mingw64-x86_64-gcc-core
+      mingw64-x86_64-gcc-g++
+      mingw64-x86_64-headers
+      mingw64-x86_64-runtime
+      mingw64-x86_64-windows-default-manifest
+      mingw64-x86_64-winpthreads
+      mingw64-x86_64-zlib
+      pkg-config
+      pkgconf
+      w32api-headers
+      w32api-runtime
+      windows-default-minifest
+   Interpreters >
+      gawk
+      libguile2.2_1
+   Libs >
+      a lot, but i don't remember getting any of these specifically, prob automatic
+   Math >
+      same as libs but fewer:
+      libgmp10
+      libmpc3
+      libmpfr6
+   Net >
+      ca-certificates
+      openssl
+   Shells >
+      bash
+      dash
+      mintty
+   System >
+      libattr1
+      rebase
+   Text >
+      groff
+      less
+   Utils >
+      diffutils
+      rebase
+      tzcode
+
+
+Path:
+(Both user and system):
+   C:/cygwin/bin
+   C:/cygwin/lib
+
+
+Also install chocolatey... and install make, since
+
+cmd
+C:\Users\Steven>where make
+C:\ProgramData\chocolatey\bin\make.exe
+C:\cygwin64\bin\make.exe
+
+
+just in case:
+
+PS C:\User\Steven> choco list --local-only
+chocolatey 0.10.15
+chocolatey-core.extension 1.3.5.1
+chocolatey-dotnetfx.extension 1.0.1
+chocolatey-visualstudio.extension 1.9.0
+chocolatey-windowsupdate.extension 1.0.4
+dotnetfx 4.8.0.20190930
+KB2919355 1.0.20160915
+KB2919442 1.0.20160915
+KB2999226 1.0.20181019
+KB3033929 1.0.5
+KB3035131 1.0.3
+make 4.3
+nodejs 15.14.0
+nodejs.install 15.14.0
+python3 3.9.4
+vcredist140 14.28.29913
+vcredist2015 14.0.24215.20170201
+visualstudio-installer 2.0.1
+visualstudio2019-workload-vctools 1.0.1
+visualstudio2019buildtools 16.9.3.0
+20 packages installed.
+
+
+cmd, go to some folder, run `make`, and done!
+also `make clean` to undo all maked file(s)
+
+
+make locations:
+1. chess
+2. chess/blind

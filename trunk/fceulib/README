@@ -1,0 +1,34 @@
+
+This is Tom 7's attempt to make FCE Ultra into a thread-safe library.
+As of 7 Sep 2015, we have here:
+
+ - The modernization I did for the Learnfun & Playfun project
+   (../tasbot/) and major culling of unnecessary parts of FCEU.
+ - Some internal documention to explain how the emulator works.
+   Many parts are still mysterious to me, even after ~100 hours
+   with this code...!
+ - Transformed all of the modules into objects so they don't read
+   and write global variables. Gosh, this was a huge pain in the ass!
+   If you use this you may owe me a beer!
+ - A new sensible interface in emulator.h.
+ - A test suite in emulator_test. It includes the ability to
+   instrument the emulator with tracing in case I introduce a bug
+   and want to see why a game is behaving differently.
+
+This code might work now, but I still need to do some testing. The
+biggest risk at this point is not a lack of thread-safety (it's reasonably
+easy to verify that there are no globals or 'static' declarations), but
+that some piece of code accesses uninitialized memory and thus doesn't
+have repeatable behavior. This may not matter for your application, so
+go to town!
+
+Note that this port requires C++11 (maybe even C++14 now) and I have
+only tested 64-bit builds.
+I am using the TDM version of GCC, at version 5.1.0.
+I previously used x86_64-w64-mingw32-g++ (GCC 4.9.2) but it lacked
+various C++11 support and I could not make it work with threads.
+
+All of the code in this directory is licensed under the terms of the
+GNU General Public License, which is contained in the file COPYING.
+The list of authors and copyright holders is in Authors.md.
+

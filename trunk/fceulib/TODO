@@ -1,0 +1,183 @@
+
+Misc:
+
+$ "/c/Program Files (x86)/Microsoft Concurrency Visualizer Collection Tools/CVCollectionCmd.exe" /Launch d:\\code\\fceulib\\emulator_test.exe /config cvconfig.xml /LaunchArgs "--output-file foo.txt"
+
+- I've been compiling with -g instead of -O3 for quite a while.
+   Do a comprehensive test to make sure it's okay!
+
+ - proper in-memory treatment of battery backed saves. lots of
+   red herrings here! also, it leaks file descriptors.
+
+      A little left over in:
+      ines.cc  ..?
+
+ - Port smeight post-facto approximate PPU to emulator.cc. This allows
+   rendering an approximate video frame even when DISABLE_VIDEO is
+   true, which is pretty much what we want for stuff like pftwo.
+
+Can get rid of:
+ - ines.cpp "trainerpoo"
+ - file wrappers can be massively simplified
+ - file archive support
+ - NSF code in mapper.h and the uncalled functions therein?
+
+Memory todo:
+ - Need to check that various objects are actually having their Free or Kill
+   methods called, or roll those into the destructors, etc.
+
+Cleanup to do:
+ - There are some symbols that are both #defined (e.g. ines.h) and
+   declared, maybe with #undef before like in mmc3.cc. So confusing!
+ - clang format on the worst offenders
+ - Common pattern in boards/* is to declare WRAMSIZE as a static
+   variable but always set it to a constant.
+ - CHECKs in Zapper
+ - In MMC3, an EXPREGS[8] in each subclass, often obviously more than is
+   necessary
+ - look through Boards for Close.* and make sure they all contain override;
+   same for Power and Reset.
+ - DECLFW_ARGS (etc.) have an FC parameter, but we don't need this
+   when they're argument signatures for member functions.
+ - Somehow look through boards for member variables that are not
+   initlized to 0 or {}.
+ - Can ines::MasterRomInfoParams move to fk23? Are there other uses?
+ - Should use template parameters instead of "is_123" type
+   constructor args in mappers/. Did all of boards/ (except MMC3).
+ - Probably some MMC3 stuff can be compile-time, by templating
+   MMC3 base class.
+ - Move MMC5 hack variables (e.g. from PPU) into MMC5 struct as much as
+   possible
+ - Remove FCEUSND_ and related prefixes where obvious (because everything
+   is FCEU, and SND_ is already evident from the class name).
+
+Surprisingly necessary:
+ - crc32 since ines.cc has a table of games and their CRCs.
+ - cart md5ing
+ - md5 in FCEUGI; note I'm using md5 for RamChecksum though
+    - If this gets threaded to cartinfo, we also need it
+      for example for hack checks in onebus.cc
+
+
+Possible performance improvements:
+ - Some notion of save state that affects CPU behavior and state that
+   does not (e.g. XBuf). Might just be through defines, but it would
+   be neat if these could coexist.
+
+ - DISABLE_VIDEO
+ 
+ - Can the ZNTable be replaced with a computation on the value itself?
+   See my comment in x6502.cc.
+
+ - ppulut2 is just a bit shift of ppulut1; better for cache to just
+   compute it?
+ 
+ - Is it possible to remove the indirection when reading/writing memory,
+   perhaps in a special case? Currently ARead is populated with a bunch
+   of function pointers (including special regions installed by various
+   mappers and cart types.) Could maybe be replaced with a single function
+   (inlined into x6502) per mapper configuration.
+
+ - JIT or AOT compile x6502 code to x86 and optimize.
+   - lots of improvements to do in AOT.
+
+ - nothing_safetynet in cart can probably go. I think I figured it out.
+
+ - Is uint8 nothing[8192] = {}; necessary in MMC5? Can it be smaller?
+
+Notes:
+"CDLogger" is "code data logger", and I have deemed it unnecessary
+
+Helper snippets:
+
+To view assembly, best so far is
+compile with -g
+gdb mario.o
+disassemble /m mario_entry_8000
+
+
+## good for finding exported symbols (e.g. classes in boards/ that
+## should be in anonymous namespace):
+
+$ nm -g -C *.o | grep '::' | grep -v 'Cart::' | grep -v 'CartInterface::' | grep -v 'google_base::' | grep -v 'FCEU::' | grep -v 'std::' | grep -v 'X6502::' | grep -v class_type_info | less
+
+
+# alias files='find . -type f | grep -v .svn | grep -v ".o$"'
+alias files="/bin/find . -type f | grep -v roms/ | grep -v roms_crash/ | grep -v .svn | grep -v '.nes$' | grep -v '.exe$' | grep -v '.o$'"
+(defun find-mentions () 
+ (interactive "")
+ (let ((sym (thing-at-point 'symbol)))
+    (message sym)
+    	     ;; TODO: version that uses \\b here around sym for word
+	     ;; boundaries only (like if there's a prefix)
+    (let ((cmd (concat "bash -c \"grep '"
+	                sym 
+	   	        "' `/bin/find /d/code/fceulib -type f | grep -v fix/ | grep -v roms/ | grep -v clean_ | grep -v roms_crash/ | grep -v .svn | grep -v '.nes$' | grep -v '.exe$' | grep -v '.o$'`\"")))
+      (message "%s" cmd)
+        (let ((res (shell-command-to-string cmd)))
+           (message "%s" (concat cmd "\n" res))
+        )
+    )    
+ )
+)
+
+// (global-set-key "\C-xm" 'find-mentions)
+
+(defun insert-fceu ()
+  (interactive "")
+  (save-excursion  (insert "fceulib__.state->"))
+)
+
+(global-set-key "\C-xx" 'insert-fceu)
+
+(defun set-cart-rectangle ()
+  (interactive "")
+  (string-rectangle (region-beginning) (region-end) "fceulib__cart.")
+)
+
+(global-set-key "\C-xw" 'set-cart-rectangle)
+
+(defun before-or-after ()
+  (interactive)
+  (let* ((curbuffer (current-buffer))
+	 (oldfile (buffer-file-name))
+	 (isbefore (string-match "-before" oldfile))
+	 (isafter  (string-match "-after" oldfile))
+	 (tobefore (replace-regexp-in-string "-after" "-before" oldfile))
+	 (toafter  (replace-regexp-in-string "-before" "-after" oldfile)))
+    (message "%s" (concat oldfile ", " tobefore ", " toafter))
+    (cond (isbefore
+           (progn
+	    (message "AFTER: %s" toafter)
+            (find-file toafter)))
+	  (isafter
+	   (progn
+	    (message "BEFORE: %s" tobefore)
+	    (find-file tobefore)))
+	  (t (message "Path must contain -before or -after.")))))
+
+; (define-key map (kbd "C0") nil)
+
+;; n.b. this way works much better than (kbd "C-0") etc.
+(global-set-key [(control ?0)]  'before-or-after)
+
+
+(fset 'structname
+   [?H ?E ?R ?E ?X ?X ?X ?| ?\C-r ?s ?t ?r ?u ?c ?t ?  right right right right right right right ?\C-  ?\C-s ?: left left escape ?w ?\C-s ?H ?E ?R ?E ?X ?X ?X right left right backspace backspace backspace backspace backspace backspace backspace backspace ?\C-y])
+(fset 'fceu
+   [escape ?< escape ?% ?f ?c ?e ?u ?l ?i ?b ?_ ?_ ?. return ?f ?c ?- ?> return ?!])
+(fset 'struct
+   [?n ?a ?m ?e ?s ?p ?a ?c ?e ?  ?\{ return ?s ?t ?r ?u ?c ?t ?  ?H ?E ?R ?E ?X ?X ?X ?\S-  ?\{ ?\C-s ?_ ?I ?n ?i ?t left left left left left ?\C-  ?\C-r ?  right escape ?w up ?\} ?\; return ?\} up escape ?\\ ?\C-  ?\C-r ?H ?E ?R ?E down ?\C-a ?\C-u ?2 ?\C-x tab up escape ?\\ ?\C-s ?H ?E ?R ?E right left ?\C-d ?\C-d ?\C-d backspace backspace backspace backspace ?\C-y ?  ?: ?\S-  ?p ?u ?b ?l ?i ?c ?  ?C ?a ?r ?t ?I ?n ?t ?e ?r ?f ?a ?c ?e ?\C-a escape ?\\ down])
+(fset 'stateregs
+   [?\C-s ?S ?t ?a ?t ?e ?R ?e ?g ?s left right ?\C-s ?\{ left ?\C-  ?\C-s ?\; left ?\C-w ?\C-s ?S ?t ?a ?t ?e ?R ?e ?g ?s right left backspace backspace backspace backspace backspace backspace backspace backspace backspace ?\C-y])
+(fset 'cart
+   [?H ?E ?R ?E ?X ?X ?X ?\C-r ?s ?t ?r ?u ?c ?t ?  C-right ?\C-  ?\C-s ?: left escape ?w ?\C-s ?H ?E ?R ?E ?X ?X ?X left ?\C-d backspace backspace backspace backspace backspace backspace ?\( ?\( ?\C-y ?\C-r ?\( right escape ?\\ ?\C-s ?  left ?  ?* ?\) ?f ?c ?- ?> ?f ?c ?e ?u ?- ?> ?m ?a ?p ?i ?f ?a ?c ?e ?\) ?- ?> escape ?\\])
+(fset 'declfw
+   [?\[ ?\] ?\( ?D ?E ?C ?L ?F ?W ?_ ?A ?R ?G ?S ?\) ?\S-  ?\{ return tab tab tab ?H ?E ?R ?E ?X ?X ?X ?  left ?\C-r ?s ?t ?r ?u ?c ?t ?  right C-right right ?\C-  ?\C-s ?: left left escape ?w ?\C-s ?H ?E ?R ?E ?X ?X ?X right left backspace backspace backspace backspace backspace backspace backspace ?\( ?\( ?\C-y ?* ?\) ?f ?c ?- ?> ?f ?c ?e ?u ?l backspace ?- ?> ?m ?a ?p ?i ?f ?a ?c ?e ?\) ?- ?> escape ?\\ ?\C-s ?\) left ?\( ?D ?E ?C ?L ?F ?W ?_ ?F ?O ?R ?W ?A ?R ?D ?\) ?\; return tab ?\} ?\C-x])
+(fset 'over
+   [tab ?\C-  C-right ?\C-w tab ?\C-s ?\( ?F ?C left left escape ?d escape ?d ?\C-s ?\) right left ?  ?o ?v ?e ?r ?r ?i ?d ?e])
+
+(fset 'init
+   [escape ?d ?C ?a ?r ?t ?I ?n ?t ?e ?r ?f ?a ?c ?e ?  ?* escape ?\\ ?\C-  ?\C-s ?_ left escape ?w ?\C-s ?\( right left ?F ?C ?\S-  ?* ?f ?c ?, ?  ?\C-e return tab ?r ?e ?t ?u ?r ?n ?  ?n ?e ?w ?  ?\C-y ?\( ?F backspace ?f ?c ?, ?  ?i ?n ?f ?o ?\) ?\;])
+
+

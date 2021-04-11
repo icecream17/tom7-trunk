@@ -1,0 +1,497 @@
+--------------------------------------------------
+threadripper machine plus misc changes in the
+last year or whatever  (27 Oct 2018)
+--------------------------------------------------
+
+only do StepFull on the last frame:
+RAM checksum: b9ea3297351afa03
+Img checksum: 9c8975828c9578a7
+Startup time: 0.0020s
+Exec time:    12.4618s
+
+
+mario-long, no AOT here.
+Interesting?ly, the utilized CPU moves between
+NUMA nodes maybe every 45 seconds. The nodes
+have significantly different performance (14.08,
+13.63, 13.82, 13.84). It could be speed scaling
+(I think it does this dynamically based on the
+thermal performance) or could be NUMA memory
+overhead...
+
+Startup time: 0.0020s
+Exec time:    13.9034s
+
+It's nice that this is at least faster than the
+old machine (even AOT) single-threaded too.
+
+
+--------------------------------------------------
+aot optimization
+--------------------------------------------------
+New benchmark on mario-long, now running until
+convergence of 1 decimal place:
+
+Startup time: 0.0010s
+Exec time:    17.1332s
+
+
+Treat low reads/writes as being directly to RAM:
+Startup time: 0.0010s
+Exec time:    16.9698s      nice :)
+
+Don't histo instructions:
+Startup time: 0.0010s
+Exec time:    16.8800s
+
+Use locals (inefficiently), make reads from registers
+explicit. Code size before:
+3694148 mario_65024.o
+292292006       total
+2435165 mario_65024.cc
+213401671       total
+stripped:
+685035  mario_65024.o
+59466287        total
+
+C++ size:
+8189102 mario_65024.cc
+673499571       total   ~3x (!)
+
+object size (unstripped):
+12520976        mario_65024.o
+993807194       total  (3.4x) :(
+
+object size (stripped):
+1118035 mario_65024.o
+95204979        total  1.6x!  :/
+
+Startup time: 0.0010s
+Exec time:    17.3008s   ... oof
+
+(Hmm, it's obvious why this produces more C++ code, but I thought it
+would optimize better because gcc would see that a lot of the stores
+are dead. I wonder why..?)
+
+Don't flush/load jammed or pc when calling a function and then returning,
+since only x6502 reads and sets these:
+
+Startup time: 0.0000s
+Exec time:    17.1048s  (ok, already some improvement...)
+C++:
+7580230 mario_65024.cc
+629425035       total
+unstripped:
+12372506        mario_65024.o
+973005804       total
+stripped:
+
+1123687 mario_65024.o
+95956515        total
+
+For calls to FCEU_SoundHook, only save the necessary locals:
+
+unstripped:
+11721796        mario_65024.o   output code size is smaller as expected..
+896117674       total           
+
+6701130 mario_65024.cc   and c++, obv
+547069531       total
+
+Startup time: 0.0050s
+Exec time:    17.7448s
+Startup time: 0.0000s
+Exec time:    17.7359s
+... wtf? Shouldn't this be STRICTLY BETTER? So weird.
+Maybe it is failing at register allocation because some variables
+are live for much longer? Or was merging the FlushLocals for all of
+those conditionals?
+
+Now with -O3:
+Startup time: 0.0000s
+Exec time:    17.8229s
+Wow ugh. Maybe we are making code too big for cache (?), or exceeding
+some optimization code size/time limit?
+
+Just to check, turn off locals again:
+
+16.3s -- yeah.
+
+Inline "Tester" in sound hook -- huge improvement!
+Startup time: 0.0010s
+Exec time:    15.6327s
+
+And simplify DMA output loop (which messes up sound, but preserves
+behavior) -- wow!
+Exec time:    14.5242s
+
+OK, now new ultrasimplified output loop that preserves cpu behavior:
+Startup time: 0.0010s
+Exec time:    15.3032s
+(ok, don't know what that last one was -- maybe that was #if 0 on
+ the whole loop, but that does NOT preserve behavior). With moderately
+simplified loop, we only get
+Startup time: 0.0010s
+Exec time:    15.5844s
+
+so current best is ultrasimplified:
+Startup time: 0.0010s
+Exec time:    15.3032s
+
+commenting out the "Do*" function calls:
+(but this causes many memory diffs.!)
+Startup time: 0.1150s
+Exec time:    14.9005s
+
+Momentarily comparing back to interpreted (but disabled sound):
+Startup time: 0.0020s
+Exec time:    16.7197s
+
+AOT, with disabled sound (including writes to waves):
+Startup time: 0.0010s
+Exec time:    14.9766s    (11% improvement over interpreted)
+
+--------------------------------------------------
+aot
+--------------------------------------------------
+
+very first test (only generating a handful of
+instructions):
+
+plain x6502:
+Mem checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+Startup time: 0.0010s
+Exec time:    7.8114s
+
+incomplete aot:
+RAM checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+Startup time: 0.0010s
+Exec time:    7.9715s
+
+hmm :/
+
+Old cycles: 197132539
+AOT entries: 19793951
+RAM checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+
+Finished.
+Startup time: 0.0010s
+Exec time:    7.9395s
+
+implement 0x48, 0x08:
+
+Old cycles: 196943380
+AOT entries: 19810796
+RAM checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+
+Finished.
+Startup time: 0.0010s
+Exec time:    7.9495s
+
+Old cycles: 196818657
+AOT entries: 19820519
+RAM checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+
+RTS 0x60:
+
+Old cycles: 196339610
+AOT entries: 20062556
+RAM checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+
+Finished.
+Startup time: 0.0010s
+Exec time:    7.9505s
+
+JMP absolute 0x4c:
+
+RAM checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+Old cycles: 60282877
+AOT entries: 134660087
+Startup time: 0.0010s
+Exec time:    6.8974s
+
+ST_ZP instructions:
+
+Old cycles: 59095030
+AOT entries: 134743968
+Startup time: 0.0230s
+Exec time:    6.9234s
+
+CMP instructions:
+
+Old cycles: 57168145
+AOT entries: 135207647
+Startup time: 0.0190s
+Exec time:    7.0774s
+
+LD_ABI instructions:
+Old cycles: 55470224
+AOT entries: 135493299
+Startup time: 0.0770s
+Exec time:    6.9604s
+
+ADC instructions:
+RAM checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+Old cycles: 54167955
+AOT entries: 135640914
+Startup time: 0.0010s
+Exec time:    6.9634s
+
+SBC instructions:
+RAM checksum: af57274ece679455
+Img checksum: c3e8723a5a0d4020
+Old cycles: 53831944
+AOT entries: 135685298
+Startup time: 0.0010s
+Exec time:    7.0034s
+
+LD_IX instructions, jmp 6c:
+Old cycles: 53770499
+AOT entries: 135717803
+Startup time: 0.0000s
+Exec time:    6.7820s
+
+LD_ZP instructions:
+Old cycles: 47967458
+AOT entries: 136682093
+Startup time: 0.0000s
+Exec time:    6.8250s
+
+BIT, EOR:
+Old cycles: 47707429
+AOT entries: 136702904
+Startup time: 0.0010s
+Exec time:    7.2034s
+
+LD_IY:
+Old cycles: 46050684
+AOT entries: 136947357
+Startup time: 0.0010s
+Exec time:    7.0754s
+
+RTI:
+Old cycles: 45869975
+AOT entries: 137112213
+Startup time: 0.0010s
+Exec time:    7.1304s
+
+RMW_A LSR ASL:
+Old cycles: 41326184
+AOT entries: 137655153
+Startup time: 0.0010s
+Exec time:    7.1904s
+
+LD_ZPX LD_ZPY:
+Old cycles: 31269067
+AOT entries: 139154007
+Startup time: 0.0010s
+Exec time:    7.1254s
+
+RMW_AB ROL ROR:
+Old cycles: 31020115
+AOT entries: 139213403
+Startup time: 0.0010s
+Exec time:    7.0494s
+
+missed 2A, 6A:
+Old cycles: 29233897
+AOT entries: 139341915
+Startup time: 0.0010s
+Exec time:    7.2494s
+
+RMW_ABX and RMW_ABY, some missing RMB_AB:
+Old cycles: 29027115
+AOT entries: 139382964
+Startup time: 0.0010s
+Exec time:    7.0464s
+
+RMW_IX:
+Old cycles: 29027115
+AOT entries: 139382964
+Startup time: 0.0180s
+Exec time:    7.0704s
+
+RMW_IY:
+Old cycles: 29027115
+AOT entries: 139382964
+Startup time: 0.0010s
+Exec time:    7.1004s
+
+0xBB, 0xBF:
+Old cycles: 29027115
+AOT entries: 139382964
+Startup time: 0.0010s
+Exec time:    7.1624s
+
+Undocumented AXS:
+Old cycles: 29027115
+AOT entries: 139382964
+Startup time: 0.0010s
+Exec time:    7.0554s
+
+missing 0xED, a few ST_ABX,ST_ABY
+Old cycles: 16563300
+AOT entries: 140928989
+Startup time: 0.0010s
+Exec time:    7.1294s
+
+ST_IX, ST_IY:
+Old cycles: 16254586
+AOT entries: 140988549
+Startup time: 0.0010s
+Exec time:    7.1044s
+
+RMW_ZP:
+Old cycles: 13976932
+AOT entries: 141346250
+Startup time: 0.0250s
+Exec time:    6.9291s
+
+ST_ZPX, ST_ZPY:
+Old cycles: 12528744
+AOT entries: 141610120
+Startup time: 0.0010s
+Exec time:    7.0783s
+
+All of mario now covered!:
+Old cycles: 12518054
+AOT entries: 141611803
+Startup time: 0.0000s
+Exec time:    6.9510s
+
+All 6502 is implemented:
+Old cycles: 12518054
+AOT entries: 141611803
+Startup time: 0.0000s
+Exec time:    6.8120s
+
+
+--------------------------------------------------
+threads
+--------------------------------------------------
+12 threads, win32 threading:
+
+Took 2197932.71 ms
+
+real    36m38.107s
+user    0m0.016s
+sys     0m0.015s
+
+
+12 threads, tdm-gcc-64, pthreads
+ 0.  676: About to grab done lock.
+ 1.  678: About to grab done lock.
+ 2.  679: About to grab done lock.
+ 3.  681: About to grab done lock.
+ 4.  687: About to grab done lock.
+ 5.  686: About to grab done lock.
+ 6.  688: About to grab done lock.
+ 7.  689: About to grab done lock.
+ 8.  683: About to grab done lock.
+ 9.  682: About to grab done lock.
+10.  685: About to grab done lock.
+11.  684: About to grab done lock.
+Did 690/690 = 100.0%.
+Writing 690 results to timing2.txt...
+Took 2066452.20 ms
+
+real    34m26.626s
+user    0m0.000s
+sys     0m0.015s
+
+--------------------------------------------------
+
+print before freeing each vector too
+
+Took 2091395.05 ms
+
+real    34m51.584s
+user    0m0.000s
+sys     0m0.031s
+
+
+--------------------------------------------------
+
+incremental free:
+
+Took 2143036.63 ms
+
+real    35m43.234s
+user    0m0.000s
+sys     0m0.015s
+
+--------------------------------------------------
+
+on linux virtualbox (6 core; host shows ~33% utilization):
+concurrency=12
+
+real 24m53.346s
+user 66m45.204
+sys  11m14.160s
+
+same, windows shows ~50% utilization, linux ~95%
+concurrency=6
+
+real 13m27.882s
+user 62m55.408s
+sys 2m33.328s
+
+T_T
+
+with virtualbox set to 12 cores, and concurrency=12, I get
+
+real 15m11.395
+user 105m56.060
+sys 7m18.156s
+
+though utilization shows higher.
+
+with 8 cores, concurrency=12
+
+real 21m19
+user 93m19
+sys 9m14
+
+
+--------------------------------------------------
+
+
+
+Cutting out various unused stuff
+(not expecting this to change anything except compile/link times!)
+
+Took 38398.49 ms
+
+real	0m38.418s
+user	0m38.372s
+sys	0m0.020s
+
+Took 38889.61 ms
+
+real	0m38.894s
+user	0m38.855s
+sys	0m0.021s
+
+-O2:
+
+Took 38036.63 ms
+
+real    0m38.040s
+user    0m38.023s
+sys     0m0.010s
+
+First successful compile:
+
+Took 38064.33 ms
+
+real	0m38.068s
+user	0m38.046s
+sys	0m0.011s
